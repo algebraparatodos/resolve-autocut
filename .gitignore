@@ -1,0 +1,46 @@
+# Material y resultados
+#
+# Nada de lo que se graba, se genera o se transcribe entra al
+# repositorio. No es solo por el peso: son los videos de quien use esto
+# y no tienen por que viajar con el programa.
+
+crudos/
+* - montaje/
+sacar-silencios/videos/
+sacar-silencios/informes/
+
+# Lo que genera el programa mientras trabaja
+*.mov
+*.mp4
+*.mkv
+*.avi
+*.mxf
+*.wav
+
+# El motor de voz: son 300 MB que se instalan solos la primera vez
+.venv/
+
+# Las herramientas anteriores al montaje automatico, que se quedan en
+# privado. Son de trabajos concretos y no del programa: una tabla de
+# color medida sobre una calculadora, las animaciones de una clase de
+# matematica, y una version suelta del corte de silencios que hoy
+# duplicaria lo que hace el paquete.
+animar-formulas/
+aclarar-pantalla/
+aclarar-pantalla.bat
+sacar-silencios/
+sacar-silencios.bat
+respaldar-edicion/
+respaldar-edicion.bat
+
+# Notas de trabajo propias, que hablan de los videos de quien lo usa y
+# no del programa
+PENDIENTES.md
+CLAUDE.md
+NOTAS-DEL-PROYECTO.md
+docs/CURSO-MONTAJE-AUTOMATICO.md
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
