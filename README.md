@@ -3,7 +3,7 @@
 Le arrastrás la carpeta con lo que grabaste y te deja en Resolve una
 línea de tiempo lista para editar: el audio parejo, el material liviano
 para que la reproducción no se arrastre, todo lo que no sea voz cortado,
-y las frases que dijiste dos veces marcadas con banderas del mismo color.
+y las frases que dijiste dos veces pintadas del mismo color.
 
 No exporta nada, no elige tomas y no pone efectos. Lo que devuelve es el
 punto desde el que empieza la edición de verdad.
@@ -79,7 +79,7 @@ antes de dar el montaje por bueno.
 nada tira un error: cuando algo no se puede hacer, la llamada devuelve
 `None` o `False` y sigue como si nada. De ahí que acá se escriba un
 ajuste y se vuelva a leer, se arme la línea de tiempo y se cuenten los
-clips, y se enganche un proxy y se relea la propiedad. Las quince
+clips, y se enganche un proxy y se relea la propiedad. Las diecisiete
 trampas concretas, con lo que falla y cómo se reconoce, están en
 [docs/davinci-resolve.md](docs/davinci-resolve.md).
 
@@ -109,7 +109,7 @@ programa, y lo que se borre vuelve al valor de fábrica.
 
 Lo que más se toca: `pausa_minima` si los cortes quedan atropellados,
 `confianza_voz` si se cuela ruido o se come palabras, y
-`similitud_minima` si las banderas agrupan de más o de menos.
+`similitud_minima` si el agrupado de repetidas marca de más o de menos.
 
 ## Cómo está armado
 
