@@ -23,6 +23,7 @@ asi que no hay forma de encenderla desde la API.
 import os
 import pathlib
 import subprocess
+import threading
 import time
 
 from .. import consola, interprete
@@ -32,6 +33,15 @@ from .. import consola, interprete
 # usuario con Resolve abriendose y un programa que ya dijo que fallo.
 ESPERA_MAXIMA = 180
 ENTRE_INTENTOS = 2
+
+# Lo maximo que se deja a un intento de conexion. 'scriptapp' puede
+# quedarse trabado adentro sin volver nunca (ver _lanzar_suelto), y sin
+# este limite la ventana se cuelga sin llegar a decir que fallo.
+LIMITE_POR_INTENTO = 15
+
+# Donde escucha el servidor de scripting de Resolve ('fuscript.exe -s',
+# que Resolve lanza solo cuando termina de arrancar).
+PUERTO_DEL_SCRIPTING = 1144
 
 
 class NoHayResolve(Exception):
@@ -48,14 +58,52 @@ def _ejecutable():
     return None
 
 
+def _servidor_escuchando():
+    """
+    Si el servidor de scripting de Resolve ya esta esperando conexiones.
+
+    Se mira la tabla de puertos de Windows, sin conectarse: tocar el
+    puerto antes de tiempo es justo lo que lo rompe (ver _enganchar). Se
+    reconoce el puerto que escucha porque no tiene direccion remota
+    ('0.0.0.0:0'), y no por la palabra del estado, que netstat traduce
+    al idioma de Windows.
+    """
+    try:
+        tabla = subprocess.run(["netstat", "-an", "-p", "TCP"],
+                               capture_output=True, text=True,
+                               errors="replace", timeout=20).stdout
+    except (OSError, subprocess.SubprocessError):
+        # Sin netstat no se puede mirar: se deja intentar, como antes.
+        return True
+    sufijo = ":{}".format(PUERTO_DEL_SCRIPTING)
+    for linea in tabla.splitlines():
+        partes = linea.split()
+        if (len(partes) >= 3 and partes[1].endswith(sufijo)
+                and partes[2] in ("0.0.0.0:0", "[::]:0")):
+            return True
+    return False
+
+
 def _enganchar():
     """
     Un intento de conexion. Devuelve el objeto Resolve o None.
 
     No distingue entre "no esta instalado" y "no esta abierto": eso lo
     decide quien llama, que es el que sabe si ya lo intento abrir.
+
+    Solo se llama a 'scriptapp' cuando el servidor de scripting ya esta
+    escuchando. Llamarlo antes, mientras Resolve arranca, deja una
+    conexion a medio hacer que el servidor recibe al nacer y no sabe
+    atender: muere con 'RemoteApp::Connect ... ioctlsocket(block) err 1'
+    (se lee en Support\\logs\\ResolveDebug.txt), Resolve lo relanza dos
+    veces mas, se rinde, y desde ahi ya no contesta a nadie hasta
+    cerrarlo. Medido el 06/10/2026: abierto por montar.bat fallaba
+    siempre; abierto igual pero probando desde procesos sueltos que no
+    tocaban el puerto antes de tiempo, contestaba a los 23 segundos.
     """
     if interprete.preparar_entorno() is None:
+        return None
+    if not _servidor_escuchando():
         return None
     try:
         import DaVinciResolveScript as motor
@@ -64,8 +112,62 @@ def _enganchar():
     return motor.scriptapp("Resolve")
 
 
+def _enganchar_con_limite():
+    """
+    Un intento de conexion que no puede colgar el programa.
+
+    Se hace en un hilo aparte y se lo espera LIMITE_POR_INTENTO segundos.
+    Si no volvio, cuenta como que Resolve no contesto; el hilo trabado
+    queda ahi, pero es de fondo y se muere al cerrar el programa.
+    """
+    resultado = []
+    hilo = threading.Thread(target=lambda: resultado.append(_enganchar()),
+                            daemon=True)
+    hilo.start()
+    hilo.join(LIMITE_POR_INTENTO)
+    return resultado[0] if resultado else None
+
+
 def esta_corriendo():
     return _enganchar() is not None
+
+
+def _lanzar_suelto(ruta):
+    """
+    Arranca Resolve sin ningun lazo con la ventana del montaje.
+
+    Lanzado como hijo de la consola (un Popen a secas, como era antes),
+    Resolve abre pero la API no contesta nunca: 'scriptapp' se queda
+    trabado adentro y el programa no avanza ni llega al aviso de que
+    Resolve no responde. Medido el 02/10/2026 con montar.bat de verdad:
+    asi, colgado mas de 3 minutos; lanzado suelto como aca, Resolve
+    contesto a los 8 segundos. Ese mismo dia, a la manana, la ventana de
+    montar.bat se cerro justo al abrir Resolve; no se pudo reproducir el
+    cierre en si, pero si que ese camino se rompe en ese punto.
+
+    Suelto quiere decir: grupo de procesos propio, sin consola heredada,
+    sin entrada ni salida, y fuera del 'job' de la ventana si Windows lo
+    permite.
+
+    Ojo: lanzarlo suelto no alcanzo. El 06/10/2026 volvio a trabarse
+    igual, y la causa no estaba en como se lanza sino en conectarse antes
+    de tiempo (ver _enganchar).
+    """
+    nada = subprocess.DEVNULL
+    banderas = (getattr(subprocess, "DETACHED_PROCESS", 0x8)
+                | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x200))
+    fuera_del_job = getattr(subprocess, "CREATE_BREAKAWAY_FROM_JOB",
+                            0x01000000)
+    try:
+        subprocess.Popen([str(ruta)], cwd=str(ruta.parent), close_fds=True,
+                         stdin=nada, stdout=nada, stderr=nada,
+                         creationflags=banderas | fuera_del_job)
+    except OSError:
+        # Si la ventana corre dentro de un job que no deja salir, pedirlo
+        # da "acceso denegado": se lanza suelto igual, sin eso.
+        subprocess.Popen([str(ruta)], cwd=str(ruta.parent), close_fds=True,
+                         stdin=nada, stdout=nada, stderr=nada,
+                         creationflags=banderas)
 
 
 def abrir():
@@ -83,16 +185,18 @@ def abrir():
 
     consola.detalle("Resolve no esta abierto: lo abro yo. Tarda un rato.")
     try:
-        subprocess.Popen([str(ruta)], cwd=str(ruta.parent),
-                         close_fds=True)
+        _lanzar_suelto(ruta)
     except OSError as fallo:
         raise NoHayResolve("No pude abrir Resolve: {}".format(fallo))
 
+    # Se cuenta con el reloj y no sumando las pausas, porque un intento
+    # trabado se come hasta LIMITE_POR_INTENTO segundos.
+    desde = time.time()
     esperado = 0
     while esperado < ESPERA_MAXIMA:
         time.sleep(ENTRE_INTENTOS)
-        esperado += ENTRE_INTENTOS
-        resolve = _enganchar()
+        resolve = _enganchar_con_limite()
+        esperado = int(time.time() - desde)
         if resolve is not None:
             consola.hecho("Resolve respondio a los {} segundos"
                           .format(esperado))

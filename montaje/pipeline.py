@@ -12,20 +12,24 @@ El orden de los pasos no es casual y conviene no tocarlo sin leer esto:
   3. **Nivelar el audio**, que reescribe los archivos.
   4. **Generar los proxies**, que salen de los archivos ya nivelados.
   5. **Importar** y engancharle a cada clip su proxy.
-  6. **Detectar la voz** y calcular los cortes.
+  6. **Detectar la voz** y calcular los cortes, partiendo los tramos
+     donde entra y sale la voz de Juani para que cada clip tenga una
+     sola voz.
   7. **Armar y medir**, porque la API acepta cosas que despues no hace.
-  8. **Marcar las repetidas**, que es lo ultimo porque necesita saber
-     que clips quedaron de verdad.
+  8. **Marcar las repetidas**, porque necesita saber que clips
+     quedaron de verdad.
+  9. **Marcar la voz de Juani**, despues de las repetidas para que su
+     color quede por encima: es lo que el pidio ver primero.
 """
 
 import pathlib
 
-from . import audio, consola, herramientas, proxies, repeticiones
+from . import audio, consola, herramientas, proxies, repeticiones, voces
 from .resolve import conexion, linea, medios
 from .resolve import proyecto as ajustes_proyecto
 from .voz import deteccion
 
-PASOS = 8
+PASOS = 9
 
 
 class Resultado(object):
@@ -35,6 +39,7 @@ class Resultado(object):
         self.videos = []
         self.tramos = 0
         self.grupos = 0
+        self.otra_voz = 0
         self.segundos_crudos = 0.0
         self.segundos_montados = 0.0
         self.avisos = []
@@ -205,7 +210,29 @@ def montar(carpeta, ajustes):
                            "lo pongo entero".format(original.name))
             tramos = [[0.0, largo]]
 
+        # Donde habla Juani se corta aparte, para que su clip tenga solo
+        # su voz. Se hace aca y no al pintar: despues de armar, la API no
+        # deja partir un clip.
+        suyos = set()
+        graves = deteccion.voz_grave(donde_escuchar, ajustes["otra voz"])
+        if graves:
+            tramos, suyos = voces.partir(tramos, graves)
+
+        # Un tramo que no llega a un cuadro se cae al pasar a cuadros, y
+        # correria todos los indices de despues: los de las repetidas y
+        # los de la voz de Juani pintarian el clip equivocado.
+        quedan = [i for i, (a, b) in enumerate(tramos)
+                  if linea.a_cuadros([[a, b]], clip["ritmo"], clip["cuadros"])]
+        suyos = {quedan.index(i) for i in suyos if i in quedan}
+        tramos = [tramos[i] for i in quedan]
+
         cortes = linea.a_cuadros(tramos, clip["ritmo"], clip["cuadros"])
+        # Los pedazos de una voz y otra estan pegados, y 'a_cuadros'
+        # redondea el arranque para abajo y el final al mas cercano: el
+        # cuadro del borde quedaria en los dos clips, repetido.
+        for k in range(1, len(cortes)):
+            if cortes[k][0] < cortes[k - 1][1]:
+                cortes[k] = (cortes[k - 1][1], cortes[k][1])
         hablado = sum(f - i for i, f in tramos)
         resultado.segundos_montados += hablado
         resultado.videos.append((original.name, largo, hablado, len(cortes)))
@@ -214,9 +241,13 @@ def montar(carpeta, ajustes):
                       .format(original.name, len(cortes),
                               consola.duracion(hablado),
                               consola.duracion(largo)))
+        if suyos:
+            consola.detalle("      {} de esos tramos son tuyos, cortados "
+                            "aparte".format(len(suyos)))
 
         por_video.append({"original": original, "ruta": donde_escuchar,
-                          "tramos": tramos, "desde": len(pedido)})
+                          "tramos": tramos, "desde": len(pedido),
+                          "suyos": suyos})
 
         # Con pista de audio aparte hay que decir que de cada clip se
         # toma solo la imagen (1) o solo el sonido (2). Sin ella, el clip
@@ -295,6 +326,18 @@ def montar(carpeta, ajustes):
                       .format(len(grupos_globales), marcados))
     else:
         consola.hecho("no encontre frases repetidas.")
+
+    # --- 9. La voz de Juani, marcada ---------------------------------
+    consola.paso(9, PASOS, "Marco donde se te oye detras de quien habla")
+    con_otra_voz = [video["desde"] + i
+                    for video in por_video for i in sorted(video["suyos"])]
+
+    if con_otra_voz:
+        resultado.otra_voz = linea.marcar_otra_voz(items, con_otra_voz)
+        consola.hecho("{} clips en naranja con el marcador rojo "
+                      "\"voz de Juani\"".format(resultado.otra_voz))
+    else:
+        consola.hecho("no se oye otra voz.")
 
     conexion.soltar(resolve)
     return resultado

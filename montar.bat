@@ -20,12 +20,20 @@ rem  QUE HACE, SIEMPRE LO MISMO Y EN ESTE ORDEN
 rem    1. Configura el proyecto: lienzo, ritmo y uso de proxies.
 rem    2. Nivela el audio a -14 LUFS, sin recodificar el video.
 rem    3. Genera copias livianas y se las engancha a Resolve.
-rem    4. Corta todo lo que no sea alguien hablando.
-rem    5. Marca con banderas del mismo color las frases repetidas.
+rem    4. Corta todo lo que no sea alguien hablando, y corta aparte
+rem       donde se oye a Juani detras de Natalia.
+rem    5. Pinta del mismo color las frases repetidas, y en naranja los
+rem       clips con la voz de Juani.
+rem
+rem  DESPUES NO SE CIERRA: queda esperando ordenes en palabras, como
+rem  "pone de fondo las de Velee", "proponeme titulos" o "exporta". Las
+rem  entiende con OpenAI (la clave de J-DEV). Enter vacio para salir.
+rem  Para dar ordenes sin volver a montar: ordenes.bat.
+rem
+rem  Todo lo que muestra queda tambien en registros\montaje AAAA-MM-DD.txt
 rem
 rem  QUE NO HACE
-rem    No descarta tomas, no pone zooms, no escribe textos y no
-rem    exporta nada. Eso es trabajo de quien edita.
+rem    No descarta tomas ni pone zooms. Eso es trabajo de quien edita.
 rem
 rem  ANTES DE LA PRIMERA VEZ, en Resolve:
 rem     Preferences > System > General

@@ -52,6 +52,13 @@ def correr(orden):
                           encoding="utf-8", errors="replace")
 
 
+def correr_en(carpeta, orden):
+    """Como 'correr', pero parado en 'carpeta' (rutas relativas ahi)."""
+    return subprocess.run(orden, capture_output=True, text=True,
+                          encoding="utf-8", errors="replace",
+                          cwd=str(carpeta))
+
+
 def videos_de(carpeta):
     """
     Los videos de una carpeta, en orden alfabetico.
@@ -121,7 +128,26 @@ def datos_del_video(ruta):
         largo = 0.0
 
     return {"ritmo": ritmo, "largo": largo, "ancho": ancho, "alto": alto,
-            "tiene_video": video is not None, "tiene_audio": audio is not None}
+            "tiene_video": video is not None, "tiene_audio": audio is not None,
+            "timecode": _timecode(info)}
+
+
+def _timecode(info):
+    """
+    El codigo de tiempo con el que arranca el video, o None.
+
+    Hace falta para los proxies: Resolve empareja la copia liviana con
+    su original por el codigo de tiempo, y una copia que arranca en
+    00:00:00:00 cuando el original arranca en 03:21:01:22 la rechaza sin
+    decir nada. Las camaras lo guardan en una pista de datos aparte (la
+    'tmcd' de los .MP4 de Sony), no en la de video, por eso se mira en
+    todas las pistas y en el formato.
+    """
+    for pista in info.get("streams", []):
+        tc = (pista.get("tags") or {}).get("timecode")
+        if tc:
+            return tc
+    return (info.get("format", {}).get("tags") or {}).get("timecode")
 
 
 def _esta_girado(pista):

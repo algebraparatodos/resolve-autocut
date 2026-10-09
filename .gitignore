@@ -44,3 +44,8 @@ docs/CURSO-MONTAJE-AUTOMATICO.md
 __pycache__/
 *.py[cod]
 .pytest_cache/
+
+# Lo que imprime cada corrida y la musica que arma el programa
+registros/
+musica de fondo/
+textos generados/

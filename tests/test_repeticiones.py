@@ -228,11 +228,14 @@ class PalabrasSeguidas(unittest.TestCase):
             "cero coma nueve periodico es igual a uno, mira"))
 
     def test_frases_distintas_que_comparten_vocabulario(self):
-        # Caso real de un video de Juani: se parecen 0,57 y comparten
+        # Caso real de un video de Natalia: se parecen 0,57 y comparten
         # cuatro palabras seguidas, pero son dos frases distintas de la
-        # misma explicacion. Marcarlas seria pintar de color algo que no
-        # es una repeticion, y eso hace que las marcas dejen de servir.
-        self.assertFalse(self._repiten(
+        # misma explicacion. Con seis palabras seguidas no se marcaban;
+        # desde el 02/10/2026 alcanzan cuatro, y esta falsa alarma se
+        # acepta: Juani prefiere ver alguna de mas antes que toparse
+        # editando con repetidas sin pintar. Si este test vuelve a dar
+        # False es que se endurecio el criterio, y eso hay que hablarlo.
+        self.assertTrue(self._repiten(
             "super importante porque cuando vertamos la escalola si nuestro modelo no esta",
             "cuando vertamos la escalola nuestro modelo va directamente a flotar"))
 

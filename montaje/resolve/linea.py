@@ -22,9 +22,18 @@ from .. import consola
 # video cortado en pedazos. Medido: se marcaron dos tramos y los cuatro
 # quedaron con la bandera puesta. 'SetClipColor' si es de cada tramo, y
 # ademas se ve mejor, porque pinta el clip entero.
-COLORES = ["Orange", "Teal", "Violet", "Lime", "Pink", "Navy", "Brown",
+#
+# El naranja no esta: queda reservado para la voz de Juani (ver
+# 'marcar_otra_voz'), y el Apricot tampoco, porque al lado se confunde.
+COLORES = ["Teal", "Violet", "Lime", "Pink", "Navy", "Brown",
            "Yellow", "Green", "Blue", "Purple", "Olive", "Tan", "Beige",
-           "Chocolate", "Apricot"]
+           "Chocolate"]
+
+# Juani lo queria en rojo, pero los clips de Resolve no tienen rojo:
+# 'SetClipColor("Red")' devuelve False, comprobado en Resolve 21. Va el
+# naranja, que es lo mas cercano, y un marcador que si puede ser rojo.
+COLOR_OTRA_VOZ = "Orange"
+MARCADOR_OTRA_VOZ = "Red"
 
 
 def a_cuadros(tramos, ritmo, total_cuadros):
@@ -194,6 +203,29 @@ def marcar_grupos(items, grupos):
             # asi que va uno fijo: lo que agrupa a la vista es el color
             # del clip, y el marcador solo tiene que ser legible.
             item.AddMarker(0, "Cyan", nota, "", 1, "")
+    return marcados
+
+
+def marcar_otra_voz(items, indices):
+    """
+    Pinta los tramos donde se oye a Juani detras de quien habla.
+
+    Va despues de las repetidas y les pisa el color a proposito: es lo
+    que Juani pidio ver primero. Que el tramo era una repetida no se
+    pierde, porque eso tambien lo dice su marcador.
+
+    El marcador va en el cuadro 1 y no en el 0, donde ya puede estar el
+    de la repetida: Resolve no deja dos marcadores en el mismo cuadro y
+    lo rechaza con un False pelado.
+    """
+    marcados = 0
+    for indice in indices:
+        if indice >= len(items):
+            continue
+        item = items[indice]
+        if item.SetClipColor(COLOR_OTRA_VOZ):
+            marcados += 1
+        item.AddMarker(1, MARCADOR_OTRA_VOZ, "voz de Juani", "", 1, "")
     return marcados
 
 

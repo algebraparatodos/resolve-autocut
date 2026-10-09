@@ -14,6 +14,9 @@ from . import motor
 
 TRABAJADOR = pathlib.Path(__file__).resolve().parent / "trabajador.py"
 
+# Por debajo de esta mediana, la voz principal del video es grave.
+VOZ_PRINCIPAL_GRAVE = 175.0
+
 
 def _preguntar(python, modo, argumentos, cuanto_tarda=None):
     """
@@ -114,6 +117,41 @@ def afinar(tramos, largo, ajustes):
     return unidos
 
 
+def voz_grave(ruta, ajustes):
+    """
+    Donde se oye una voz mas grave que la de quien habla.
+
+    Devuelve los tramos en segundos, [] si no hay que marcar nada, o None
+    si el motor no esta. Si la voz principal del video ya es grave, como
+    en los videos donde habla Juani, devuelve [] y lo avisa: marcaria el
+    video entero.
+    """
+    if ajustes["tono_maximo_hz"] <= 0:
+        return []
+
+    python = motor.asegurar()
+    if python is None:
+        return None
+
+    respuesta = _preguntar(python, "graves",
+                           [ruta, ajustes["tono_maximo_hz"],
+                            ajustes["segundos_graves"]])
+    if respuesta is None:
+        return None
+
+    # Si quien habla tiene la voz grave, el video es de Juani y marcarlo
+    # seria pintarlo entero. El corte no es el tono maximo sino uno mas
+    # alto, a mitad de camino entre los dos: hablando a camara el anda
+    # por 129-142 Hz de mediana (dos videos de UTN), apenas por debajo
+    # de 150, y Natalia por 200-222.
+    if respuesta.get("mediana", 0) < VOZ_PRINCIPAL_GRAVE:
+        consola.detalle("{}: quien habla ya tiene la voz grave ({:.0f} Hz), "
+                        "no marco nada".format(pathlib.Path(ruta).name,
+                                               respuesta.get("mediana", 0)))
+        return []
+    return respuesta.get("tramos", [])
+
+
 def _archivo_de_cache(carpeta, ruta):
     """
     Donde se guarda lo que ya se escucho de un video.
@@ -182,3 +220,11 @@ def frases(ruta, carpeta_cache=None, clave=None, modelo="small", idioma="es"):
         except OSError:
             pass        # no poder guardarlo no es motivo para fallar
     return escuchado
+
+
+def guia_de_voz(piezas_json, salida_wav):
+    """Arma la pista guia de voces para la musica. True si salio."""
+    python = motor.asegurar()
+    if python is None:
+        return False
+    return _preguntar(python, "guia", [piezas_json, salida_wav]) is not None

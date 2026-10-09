@@ -42,27 +42,31 @@ POR_DEFECTO = {
         "pausa_minima": 0.5,
         # Aire que se deja antes y despues de cada tramo hablado. El
         # detector marca la voz justa y sin esto se come el ataque de la
-        # primera palabra y el final de la ultima.
-        "margen_antes": 0.20,
-        "margen_despues": 0.30,
+        # primera palabra y el final de la ultima. Van largos porque el
+        # detector reconoce tarde las frases que arrancan suave, y Juani
+        # prefiere que sobre un silencio a que falte una palabra.
+        "margen_antes": 1.0,
+        "margen_despues": 0.5,
         # Tramos mas cortos que esto se descartan: son toses, chasquidos
         # y golpes de labios que el detector da por voz.
         "tramo_minimo": 0.25,
         # Cuan exigente es el detector para dar algo por voz, de 0 a 1.
-        "confianza_voz": 0.5,
+        "confianza_voz": 0.35,
     },
     "repeticiones": {
         # Cuanto se tienen que parecer dos tramos para darlos por la
         # misma frase dicha dos veces, de 0 a 1. Por debajo de 0,75
-        # empieza a agrupar frases que solo comparten el arranque.
-        "similitud_minima": 0.75,
+        # empieza a agrupar frases que solo comparten el arranque; se
+        # acepta, porque Juani prefiere alguna falsa alarma a toparse
+        # editando con repetidas sin pintar.
+        "similitud_minima": 0.6,
         # Cuantos segundos mas adelante se sigue buscando la
         # repeticion. Va en segundos y no en cantidad de tramos porque
         # trabarse y volver a empezar es un fenomeno de tiempo: pasa
         # dentro del medio minuto siguiente, diga uno lo que diga en el
         # medio. Mirar mucho mas lejos agrupa frases que se parecen por
-        # casualidad.
-        "ventana_segundos": 45.0,
+        # casualidad, pero a veces se retoma una frase un minuto despues.
+        "ventana_segundos": 120.0,
         # Frases mas cortas que esto no se comparan: "si", "claro" o
         # "bueno" se repiten todo el tiempo sin ser una toma fallida.
         "palabras_minimas": 3,
@@ -71,8 +75,18 @@ POR_DEFECTO = {
         # de la frase cambie. Seis, ya sin muletillas, no coinciden por
         # casualidad. Sirve sobre todo cuando el texto viene cortado a
         # mitad de oracion, que es lo normal con tramos de pocos
-        # segundos.
-        "palabras_seguidas_iguales": 6,
+        # segundos. Con cuatro ya hay alguna coincidencia de casualidad.
+        "palabras_seguidas_iguales": 4,
+    },
+    "otra voz": {
+        # Por debajo de este tono, la voz se da por la de Juani dando
+        # indicaciones de fondo en los videos de Natalia. Ella anda por
+        # los 200-220 Hz y el por los 105. 0 apaga la deteccion.
+        "tono_maximo_hz": 150.0,
+        # Cuanta voz grave tiene que haber dentro de cada medio segundo
+        # para darla por buena. Un cuadro grave suelto es un error del
+        # medidor o una voz aguda que cae al final de la frase.
+        "segundos_graves": 0.2,
     },
     "proxies": {
         # Alto de las copias livianas. 720 alcanza para editar comodo y

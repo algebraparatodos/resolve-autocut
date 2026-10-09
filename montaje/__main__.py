@@ -2,21 +2,27 @@
 """
 La puerta de entrada: se le arrastra una carpeta y hace todo lo demas.
 
-No lleva opciones de linea de comandos a proposito. El programa existe
-para hacer siempre lo mismo sin tener que acordarse de nada, y lo que se
-puede cambiar vive en 'ajustes.ini'.
+No lleva opciones de linea de comandos a proposito, salvo la que usa
+ordenes.bat para saltar el montaje. El programa existe para hacer siempre
+lo mismo sin tener que acordarse de nada, y lo que se puede cambiar vive
+en 'ajustes.ini'. Despues del montaje queda esperando ordenes (ver
+'ordenes'), asi que la ventana no se cierra hasta que se lo piden.
 """
 
+import datetime
 import pathlib
 import sys
 
 from . import ajustes as config
-from . import consola, herramientas, interprete, pipeline
+from . import consola, herramientas, interprete, ordenes, pipeline
 
 RAIZ = pathlib.Path(__file__).resolve().parent.parent
 
 # Si se abre sin arrastrar nada, se trabaja con lo que haya aca.
 CRUDOS = RAIZ / "crudos"
+
+# El argumento con el que ordenes.bat pide saltar el montaje.
+SOLO_ORDENES = "--solo-ordenes"
 
 
 def informe(resultado):
@@ -33,6 +39,10 @@ def informe(resultado):
     if resultado.grupos:
         consola.detalle("{} frases dichas mas de una vez; cada grupo quedo "
                         "pintado de un color".format(resultado.grupos))
+
+    if resultado.otra_voz:
+        consola.detalle("{} clips donde se te oye: naranja, con marcador "
+                        "rojo".format(resultado.otra_voz))
 
     if resultado.avisos:
         consola.detalle()
@@ -106,10 +116,39 @@ def elegir_carpetas(argumentos):
 def main(argumentos=None):
     argumentos = list(sys.argv[1:] if argumentos is None else argumentos)
 
+    # Todo lo que sale por pantalla queda tambien en un archivo, por si la
+    # ventana se cierra. Uno por dia; cada corrida se agrega abajo.
+    registros = RAIZ / "registros"
+    registros.mkdir(exist_ok=True)
+    consola.registrar(registros / "montaje {}.txt".format(
+        datetime.date.today().isoformat()))
+
     # Antes que nada: si este Python no puede hablar con Resolve, el
     # programa se vuelve a lanzar solo con uno que si pueda.
     interprete.asegurar_capaz(argumentos)
 
+    # 'ordenes' (lo pasa ordenes.bat) salta el montaje y va directo a
+    # las ordenes, sobre lo que este abierto en Resolve.
+    solo_ordenes = SOLO_ORDENES in argumentos
+    argumentos = [a for a in argumentos if a != SOLO_ORDENES]
+
+    salio_todo = True
+    if not solo_ordenes:
+        try:
+            salio_todo = montar(argumentos)
+        except Exception as fallo:
+            # Nunca se cierra a mitad: se cuenta que paso y se sigue con
+            # las ordenes, que igual pueden servir sobre lo que haya.
+            consola.error("el montaje se corto: {}: {}".format(
+                type(fallo).__name__, fallo))
+            salio_todo = False
+
+    ordenes.atender()
+    return 0 if salio_todo else 1
+
+
+def montar(argumentos):
+    """El montaje de siempre. True si salio todo."""
     consola.titulo("Montaje automatico")
 
     valores, quejas = config.cargar(RAIZ)
@@ -118,7 +157,7 @@ def main(argumentos=None):
 
     carpetas = elegir_carpetas(argumentos)
     if not carpetas:
-        return 1
+        return False
 
     salio_todo = True
     for carpeta in carpetas:
@@ -127,8 +166,8 @@ def main(argumentos=None):
             salio_todo = False
             continue
         informe(resultado)
-
-    return 0 if salio_todo else 1
+    consola.cerrar_paso()
+    return salio_todo
 
 
 if __name__ == "__main__":

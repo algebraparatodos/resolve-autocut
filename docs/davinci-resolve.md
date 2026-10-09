@@ -321,6 +321,12 @@ no por su número de orden, que cambia en cuanto falta uno.
 
 ## 12. En una pista que ya tiene algo, no deja poner otro clip
 
+> **Corrección del 02/10/2026, Resolve 21.0.2:** ya no pasa. Dos textos
+> en la misma pista con dos llamadas separadas entraron los dos, y 298
+> clips se pegaron detrás de los que ya había en V1 y A1. Se deja lo de
+> abajo como historia; si vuelve a aparecer, la salida sigue siendo una
+> pista por apoyo.
+
 `AppendToTimeline` con `recordFrame` y `trackIndex` coloca un clip en un
 punto concreto de una pista, y funciona perfectamente **la primera vez**.
 Para meter un segundo clip en esa misma pista, aunque sea en un hueco
@@ -494,6 +500,110 @@ Rose, Lavender, Sky, Mint, Lemon, Sand, Cocoa, Cream. Los de clip son
 Orange, Apricot, Yellow, Lime, Olive, Green, Teal, Navy, Blue, Purple,
 Violet, Pink, Tan, Beige, Brown, Chocolate. Pasarle un color del juego
 equivocado devuelve `False` y, como siempre, no explica nada.
+
+Y entre los de clip **no hay rojo**: `SetClipColor("Red")` devuelve
+`False` (comprobado en Resolve 21, el 02/10/2026). Cuando Juani pide un
+clip en rojo, lo mas cercano es el naranja, y el rojo va en un marcador,
+que si lo admite.
+
+---
+
+## 18. Un proxy sin el codigo de tiempo del original se rechaza
+
+`MediaPoolItem.LinkProxyMedia(ruta)` devuelve `False` si la copia
+liviana no arranca en el mismo codigo de tiempo que el original. ffmpeg
+no lo copia solo: las copias salen en `00:00:00:00`, y las camaras Sony
+graban con el reloj del dia (`03:21:01:22`). Coincidir en tamano de
+cuadro, ritmo, duracion y pistas de audio no alcanza.
+
+Se arregla pasandole a ffmpeg `-timecode` con el del original, que en
+los `.MP4` de Sony esta en la pista de datos (`tmcd`), no en la de video.
+A una copia ya hecha se le puede poner sin recodificar:
+`ffmpeg -i copia.mov -map 0 -c copy -timecode 03:21:01:22 nueva.mov`.
+
+Paso el 02/10/2026: Resolve rechazo las once copias de un montaje y el
+programa siguio como si nada, con un aviso por clip que se pierde entre
+el resto. Desde entonces `proxies.py` lo copia siempre.
+
+---
+
+## 19. `GetSourceStartFrame` a veces miente por un cuadro
+
+Para saber donde empieza un tramo dentro del material hay dos llamadas,
+y no dan lo mismo:
+
+```python
+item.GetSourceStartFrame()   # 3153
+item.GetLeftOffset()         # 3154  <- el bueno
+```
+
+`GetLeftOffset` es el que coincide con el audio y con lo que se pidio al
+armar. Rearmando una linea de tiempo con `GetSourceStartFrame`, unos
+ochenta clips de trescientos quedaron corridos un cuadro respecto de su
+sonido. Para el final, `GetLeftOffset() + GetDuration()`.
+
+---
+
+## 20. En una pista bloqueada, `DeleteClips` devuelve `False` y nada mas
+
+Si la pista tiene el candado puesto, borrar un clip de ella no hace nada
+y devuelve `False`, sin decir que es por el candado. Se mira con
+`timeline.GetIsTrackLocked("audio", 2)` y se quita con
+`timeline.SetTrackLock("audio", 2, False)`.
+
+Juani bloquea la pista de la musica mientras corta, para que sus cortes
+no la partan. Por eso, al reemplazar la musica: se desbloquea, se cambia
+y **se vuelve a bloquear**, que es como el la tenia. Paso el 02/10/2026.
+
+---
+
+## 21. Conectarse antes de tiempo deja a Resolve sin scripting
+
+Si el script abre Resolve y se pone a llamar a `scriptapp("Resolve")`
+mientras arranca, Resolve abre normal pero no contesta nunca: la primera
+llamada se queda trabada y las siguientes dan `None`. La causa se lee en
+`Support\logs\ResolveDebug.txt`: Resolve lanza su servidor de scripting
+(`fuscript.exe -s`, que escucha en el puerto 1144), el servidor recibe
+la conexion a medio hacer que dejo el script y muere con
+`RemoteApp::Connect ... ioctlsocket(block) err 1`. Resolve lo relanza
+dos veces mas, se rinde ("Failed to connect to script server") y ya no
+atiende a nadie hasta cerrarlo.
+
+El 02/10/2026 parecio que la causa era lanzarlo colgado de la consola, y
+lanzarlo suelto contesto una vez. El 06/10/2026 volvio a fallar suelto,
+tres de tres, y tambien abriendolo a traves del Explorador. Lo que lo
+arreglo fue no tocar el puerto hasta que el servidor escucha: se mira la
+tabla de `netstat` sin conectarse, y recien con el 1144 escuchando se
+llama a `scriptapp`. Asi contesto a los 24 y a los 31 segundos, dos de
+dos, por el mismo camino que fallaba. Esta en `resolve/conexion.py`,
+`_servidor_escuchando`.
+
+---
+
+## 22. Un título de Fusion siempre cae en la pista 1, partiendo el video
+
+`timeline.InsertFusionTitleIntoTimeline("Text+")` mete el título en la
+pista de video 1, en el cursor, como edición de inserción: parte el clip
+de abajo y empuja todo lo que viene después, así que la imagen queda
+corrida respecto del sonido. Con la pista 1 bloqueada devuelve `None` y
+no lo pone en ninguna otra, y no hay forma de elegir la pista de
+destino. Medido el 02/10/2026.
+
+Por eso los textos se dibujan con ffmpeg en un `.mov` transparente
+(ProRes 4444) y se colocan con `AppendToTimeline` en su propia pista,
+que sí respeta `trackIndex` y `recordFrame`.
+
+---
+
+## 23. Exportar por script funciona derecho
+
+`SetCurrentRenderFormatAndCodec("mp4", "H264_NVIDIA")`, después
+`SetRenderSettings` con `SelectAllFrames`, `TargetDir` y `CustomName`,
+después `AddRenderJob`, `StartRendering([trabajo], False)`, y mientras
+`IsRenderingInProgress()`, `GetRenderJobStatus(trabajo)` da el
+porcentaje. Al final, `DeleteRenderJob` para no dejar la cola sucia.
+`GetRenderCodecs("mp4")` dice qué codificadores hay: en esta máquina
+también están los de NVIDIA, mucho más rápidos.
 
 ---
 

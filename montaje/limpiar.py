@@ -1,38 +1,49 @@
 # -*- coding: utf-8 -*-
 """
-Ver y borrar lo que ocupa disco despues de terminar un video.
+Dejar la carpeta del programa vacia para empezar el video siguiente.
 
-Editar video llena el disco en tres sitios distintos, y dos de ellos no
-se ven desde ninguna parte:
+Se usa cuando el video ya esta terminado y exportado. Borra, y solo
+dentro de la carpeta del programa:
 
-  1. **Lo que genera este programa**, en la carpeta "<lo que sea> -
-     montaje" que queda al lado de los crudos: los proxies, el audio
-     nivelado y las transcripciones.
-  2. **La cache de Resolve**, donde van las copias optimizadas y el
-     render cache. Vive donde diga el propio Resolve y crece con cada
-     proyecto sin que nadie la vacie nunca. Medido en una maquina de
-     trabajo normal: 78 GB.
-  3. **Los archivos originales**, que son de quien los grabo y este
-     programa no toca jamas.
+  1. **Los crudos**: los videos de "crudos" y de cualquier otra carpeta
+     que se haya montado aca (la que tiene al lado su "<nombre> -
+     montaje"). La carpeta "crudos" queda, vacia, para los siguientes.
+  2. **Todo lo que genero el montaje**: las carpetas "<nombre> - montaje"
+     enteras (proxies, audio nivelado, transcripciones, musica), la
+     "musica de fondo", los "textos generados" y los "registros".
 
-Nada se borra sin que la persona lo diga escribiendolo. Y se avisa de lo
-que va a costar: los proxies se vuelven a generar solos, pero tardan.
+Fuera de la carpeta del programa no se toca nada: ni lo exportado, ni la
+biblioteca de musica, ni la cache de Resolve.
+
+Nada se borra sin escribir "borrar" para confirmar.
 """
 
+import os
 import pathlib
 import shutil
+import stat
 import sys
 
-from . import consola, interprete
+from . import consola, herramientas
+
+RAIZ = pathlib.Path(__file__).resolve().parent.parent
+
+# Donde se dejan los videos para montar. Se vacia pero no se borra.
+CRUDOS = RAIZ / "crudos"
+
+# Lo que va generando el programa fuera de las carpetas de montaje.
+GENERADAS = ("musica de fondo", "textos generados", "registros")
+
+SUFIJO = " - montaje"
 
 
-def _pesa(carpeta):
-    """Cuanto ocupa una carpeta entera, en bytes."""
-    carpeta = pathlib.Path(carpeta)
-    if not carpeta.exists():
-        return 0
+def _pesa(sitio):
+    """Cuanto ocupa un archivo o una carpeta entera, en bytes."""
+    sitio = pathlib.Path(sitio)
+    if sitio.is_file():
+        return sitio.stat().st_size
     total = 0
-    for hijo in carpeta.rglob("*"):
+    for hijo in sitio.rglob("*"):
         try:
             if hijo.is_file():
                 total += hijo.stat().st_size
@@ -45,61 +56,35 @@ def en_gb(bytes_):
     return bytes_ / (1024.0 ** 3)
 
 
-def cache_de_resolve():
+def carpetas_de_crudos():
     """
-    Donde guarda Resolve sus copias optimizadas y su render cache.
-
-    Se le pregunta a Resolve en vez de suponerlo, porque es un ajuste que
-    cada uno pone donde quiere y adivinarlo mal significaria no limpiar
-    nada o, peor, borrar la carpeta equivocada.
+    'crudos' y toda carpeta del programa que se haya montado: la que
+    tiene al lado su '<nombre> - montaje'.
     """
-    if interprete.preparar_entorno() is None:
-        return None
-    try:
-        import DaVinciResolveScript as motor
-    except Exception:
-        return None
-
-    resolve = motor.scriptapp("Resolve")
-    if resolve is None:
-        return None
-
-    gestor = resolve.GetProjectManager()
-    proyecto = gestor.GetCurrentProject() if gestor else None
-    if proyecto is None:
-        return None
-
-    ruta = (proyecto.GetSetting() or {}).get("perfCacheClipsLocation")
-    return pathlib.Path(ruta) if ruta else None
+    carpetas = {CRUDOS} if CRUDOS.is_dir() else set()
+    for montaje in RAIZ.glob("*" + SUFIJO):
+        origen = RAIZ / montaje.name[:-len(SUFIJO)]
+        if origen.is_dir():
+            carpetas.add(origen)
+    return sorted(carpetas)
 
 
-def carpetas_de_montaje(desde):
-    """
-    Las carpetas de trabajo que genero el programa.
-
-    Con una carpeta concreta se busca la suya; sin nada, se buscan todas
-    las que haya al lado del programa.
-    """
-    if desde:
-        origen = pathlib.Path(desde)
-        base = origen if origen.is_dir() else origen.parent
-        propia = base.parent / (base.name + " - montaje")
-        return [propia] if propia.exists() else []
-
-    raiz = pathlib.Path(__file__).resolve().parent.parent
-    return sorted(p for p in raiz.parent.rglob("* - montaje") if p.is_dir())
-
-
-def inventario(carpetas):
-    """Que hay y cuanto pesa, partido por tipo."""
+def inventario():
+    """Que se va a borrar, con lo que pesa: (sitio, que es, bytes)."""
     filas = []
-    for carpeta in carpetas:
-        for nombre, que in (("proxies", "copias livianas para reproducir"),
-                            ("audio nivelado", "pistas de audio corregidas"),
-                            ("lo que se dice", "transcripciones")):
-            sitio = carpeta / nombre
-            if sitio.exists():
-                filas.append((sitio, que, _pesa(sitio)))
+    for carpeta in carpetas_de_crudos():
+        for video in herramientas.videos_de(carpeta):
+            filas.append((video, "crudo", _pesa(video)))
+
+    for montaje in sorted(RAIZ.glob("*" + SUFIJO)):
+        if montaje.is_dir():
+            filas.append((montaje, "lo que genero el montaje", _pesa(montaje)))
+
+    for nombre in GENERADAS:
+        carpeta = RAIZ / nombre
+        if carpeta.is_dir():
+            for hijo in sorted(carpeta.iterdir()):
+                filas.append((hijo, nombre, _pesa(hijo)))
     return filas
 
 
@@ -110,73 +95,59 @@ def _preguntar(texto):
         return ""
 
 
+def _quitar_solo_lectura(funcion, ruta, _):
+    """Windows no deja borrar un archivo de solo lectura: se le quita."""
+    os.chmod(ruta, stat.S_IWRITE)
+    funcion(ruta)
+
+
 def _borrar(sitio):
     try:
-        shutil.rmtree(sitio)
+        if sitio.is_dir():
+            shutil.rmtree(sitio, onerror=_quitar_solo_lectura)
+        else:
+            sitio.unlink()
         return True
     except OSError as fallo:
-        consola.error("no pude borrar {} ({})".format(sitio.name, fallo))
+        consola.error("no pude borrar {} ({})".format(
+            sitio.relative_to(RAIZ), fallo.strerror or fallo))
         return False
 
 
+def _quitar_vacias():
+    """Las carpetas de crudos que quedaron vacias, salvo 'crudos'."""
+    for carpeta in carpetas_de_crudos():
+        if carpeta != CRUDOS and not any(carpeta.iterdir()):
+            carpeta.rmdir()
+
+
 def main(argumentos=None):
-    argumentos = list(sys.argv[1:] if argumentos is None else argumentos)
-    consola.titulo("Limpiar lo que ocupa disco")
+    consola.titulo("Limpiar para el video siguiente")
+    consola.detalle("Solo dentro de " + str(RAIZ))
+    consola.detalle()
 
-    desde = argumentos[0] if argumentos else None
-    filas = inventario(carpetas_de_montaje(desde))
-
-    consola.detalle("Lo que genero el programa:")
+    filas = inventario()
     if not filas:
-        consola.detalle("   nada, esta todo limpio")
-    for sitio, que, peso in filas:
-        consola.detalle("   {:>8.2f} GB  {:22} ({})"
-                        .format(en_gb(peso), sitio.name, que))
-    del_programa = sum(p for _, _, p in filas)
-
-    cache = cache_de_resolve()
-    peso_cache = _pesa(cache) if cache else 0
-    consola.detalle()
-    consola.detalle("La cache de Resolve:")
-    if cache is None:
-        consola.detalle("   no pude preguntarle a Resolve donde la tiene.")
-        consola.detalle("   Abrilo con un proyecto y volve a pasar esto.")
-    else:
-        consola.detalle("   {:>8.2f} GB  {}".format(en_gb(peso_cache), cache))
-        consola.detalle("   Son las copias optimizadas y el render cache de")
-        consola.detalle("   TODOS tus proyectos, no solo del ultimo.")
-
-    consola.detalle()
-    consola.detalle("En total se pueden recuperar {:.1f} GB."
-                    .format(en_gb(del_programa + peso_cache)))
-
-    if not (del_programa or peso_cache):
+        consola.detalle("No hay nada que borrar, esta todo limpio.")
         return 0
 
-    consola.detalle()
-    consola.detalle("Que borro:")
-    consola.detalle("   1  solo los proxies (se regeneran solos, pero tardan)")
-    consola.detalle("   2  todo lo del programa")
-    consola.detalle("   3  todo lo del programa y la cache de Resolve")
-    consola.detalle("   0  nada")
-    consola.detalle()
+    for que in ("crudo", "lo que genero el montaje") + GENERADAS:
+        de_esto = [(s, p) for s, q, p in filas if q == que]
+        if not de_esto:
+            continue
+        consola.detalle("{} ({:.2f} GB):".format(
+            "Crudos" if que == "crudo" else que.capitalize(),
+            en_gb(sum(p for _, p in de_esto))))
+        for sitio, peso in de_esto:
+            consola.detalle("   {:>8.2f} GB  {}".format(
+                en_gb(peso), sitio.relative_to(RAIZ)))
+        consola.detalle()
 
-    elegido = _preguntar("      Elegi: ")
-    if elegido not in ("1", "2", "3"):
-        consola.detalle("No toco nada.")
-        return 0
-
-    objetivos = [s for s, _, _ in filas
-                 if elegido != "1" or s.name == "proxies"]
-    if elegido == "3" and cache and cache.exists():
-        objetivos.append(cache)
-
+    total = sum(p for _, _, p in filas)
+    consola.detalle("En total se liberan {:.1f} GB.".format(en_gb(total)))
     consola.detalle()
-    consola.detalle("Voy a borrar:")
-    for sitio in objetivos:
-        consola.detalle("   " + str(sitio))
-    consola.detalle()
-    consola.alerta("Esto no se puede deshacer.")
+    consola.alerta("Los crudos se borran de verdad, no van a la papelera.")
+    consola.alerta("Antes, asegurate de haber exportado el video.")
 
     if _preguntar('      Escribi "borrar" para confirmar: ') != "borrar":
         consola.detalle("No toco nada.")
@@ -184,23 +155,25 @@ def main(argumentos=None):
 
     consola.detalle()
     liberado = 0
-    for sitio in objetivos:
-        peso = _pesa(sitio)
+    fallidos = 0
+    for sitio, _, peso in filas:
         if _borrar(sitio):
             liberado += peso
-            consola.hecho("{:.2f} GB  {}".format(en_gb(peso), sitio.name))
-
-    # La cache tiene que seguir existiendo o Resolve se queja al escribir
-    # la proxima. Se borra el contenido, no el sitio.
-    if cache and cache in objetivos:
-        cache.mkdir(parents=True, exist_ok=True)
+        else:
+            fallidos += 1
+    _quitar_vacias()
+    CRUDOS.mkdir(exist_ok=True)
 
     consola.detalle()
-    consola.detalle("Liberados {:.1f} GB.".format(en_gb(liberado)))
-    consola.detalle()
-    consola.alerta("Si Resolve tiene abierto un proyecto que usaba estos")
-    consola.alerta("archivos, Windows no devuelve el espacio hasta que lo")
-    consola.alerta("cierres. Cerra el proyecto y mira de nuevo.")
+    consola.hecho("Liberados {:.1f} GB.".format(en_gb(liberado)))
+    if fallidos:
+        consola.detalle()
+        consola.alerta("{} no se pudieron borrar porque los esta usando otro"
+                       .format(fallidos))
+        consola.alerta("programa, casi seguro Resolve. Cerra el proyecto en")
+        consola.alerta("Resolve y volve a pasar limpiar.bat.")
+    else:
+        consola.detalle('La carpeta "crudos" quedo vacia para el siguiente.')
     return 0
 
 
