@@ -34,6 +34,8 @@ def _candidatos():
     """
     return [
         RAIZ / ".venv",
+        # desde que la herramienta vive en Desarrollos\herramientas\
+        RAIZ.parent.parent / "_comunes" / "transcribir" / ".venv",
         RAIZ.parent / "_comunes" / "transcribir" / ".venv",
         RAIZ.parent / "transcribir" / ".venv",
     ]

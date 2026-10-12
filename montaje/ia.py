@@ -25,7 +25,9 @@ MODELO = "gpt-6-luna"
 CLAVES = ("OPENAI_API_KEY_EDICION", "OPENAI_API_KEY_JDEV")
 
 PROYECTO = pathlib.Path(__file__).resolve().parent.parent
-RAIZ = PROYECTO.parent
+# Las claves de Juani viven en Desarrollos\Gestion\.claves.env, y esta
+# herramienta vive en Desarrollos\herramientas\edicion-de-videos.
+RAIZ = PROYECTO.parent.parent / "Gestion"
 
 
 class SinIA(Exception):

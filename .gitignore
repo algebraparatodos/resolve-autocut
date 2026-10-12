@@ -52,3 +52,9 @@ textos generados/
 
 # La memoria de Claude sobre este proyecto: nunca al repo.
 memoria/
+
+# El LEEME de instalacion de la herramienta: vive solo en disco.
+LEEME.md
+
+# Las claves nunca al repo (es publico).
+.claves.env
