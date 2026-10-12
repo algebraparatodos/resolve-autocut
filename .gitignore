@@ -49,3 +49,6 @@ __pycache__/
 registros/
 musica de fondo/
 textos generados/
+
+# La memoria de Claude sobre este proyecto: nunca al repo.
+memoria/
