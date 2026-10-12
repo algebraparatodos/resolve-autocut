@@ -34,7 +34,9 @@ def _candidatos():
     """
     return [
         RAIZ / ".venv",
-        # desde que la herramienta vive en Desarrollos\herramientas\
+        # el de transcribir-audios, su vecina en Desarrollos\herramientas\
+        RAIZ.parent / "transcribir-audios" / ".venv",
+        # donde vivia hasta el 13/10/2026
         RAIZ.parent.parent / "_comunes" / "transcribir" / ".venv",
         RAIZ.parent / "_comunes" / "transcribir" / ".venv",
         RAIZ.parent / "transcribir" / ".venv",

@@ -661,7 +661,7 @@ pedacitos de un segundo.
 
 Lo que corresponde usar es un detector de voz. El de Silero viene dentro
 de `faster-whisper`, que ya está instalado en
-`_comunes/transcribir/.venv`, y no hace falta transcribir nada para
+`herramientas/transcribir-audios/.venv`, y no hace falta transcribir nada para
 usarlo:
 
 ```python
