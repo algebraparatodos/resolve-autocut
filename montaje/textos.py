@@ -41,15 +41,35 @@ LETRA, BORDE, SOMBRA, ARRIBA = 96 / 1080.0, 6 / 1080.0, 5 / 1080.0, 0.08
 FUENTES = ["Recoleta Alt Bold", "RecoletaAlt-Bold", "Recoleta Alt Medium",
            "RecoletaAlt-Medium", "Recoleta Alt Regular", "Recoleta"]
 
+# La de los titulos de UTN Stream, que se la paso la gente del canal.
+# Se mide igual de ancha por letra que Recoleta (0,48 contra 0,47 del
+# tamano, medido el 12/10/2026) aunque parezca mucho mas estrecha: la
+# caja de la letra le llega mas arriba. Por eso el calculo del tamano
+# vale para las dos sin tocarlo.
+TUSKER = ["TuskerGrotesk-6700Bold", "TuskerGrotesk-7600Semibold",
+          "TuskerGrotesk-6500Medium"]
 
-def buscar_fuente():
-    """El archivo de Recoleta Alt instalado, la Bold primero, o None."""
+# Los colores de siempre: letra blanca con borde negro, sin bloque
+# detras. Se pueden cambiar por texto, pero no se cambian aqui: el
+# criterio de una pieza no se barre a las demas.
+LETRA_COLOR = "white"
+BORDE_COLOR = "black"
+
+
+def buscar_fuente(nombres=None):
+    """
+    El archivo de la primera fuente de la lista que este instalada.
+
+    Sin lista busca Recoleta Alt, que es la de siempre. Se miran las
+    fuentes del sistema y las del usuario, porque las que instala Juani
+    van a parar a las suyas y ahi no las ve quien solo mire C:\\Windows.
+    """
     carpetas = [pathlib.Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts",
                 pathlib.Path(os.environ.get("LOCALAPPDATA", "")) / "Microsoft"
                 / "Windows" / "Fonts"]
     archivos = [r for c in carpetas if c.exists() for r in c.iterdir()
                 if r.suffix.lower() in (".otf", ".ttf")]
-    for nombre in FUENTES:
+    for nombre in (nombres or FUENTES):
         for archivo in archivos:
             if archivo.stem.lower() == nombre.lower():
                 return archivo
@@ -62,31 +82,79 @@ def _tamano_de_letra(texto, ancho, alto):
 
     ffmpeg no ajusta solo. Se estima con lo que mide de ancho cada letra
     de Recoleta en promedio (0,55 del tamano), que da de sobra.
+
+    Con varios renglones manda el mas largo, no el texto entero: midiendo
+    el largo total, un texto partido en tres se achicaba a un tercio de
+    lo que entraba y quedaba ilegible en el telefono.
     """
     letra = alto * LETRA
-    estimado = len(texto) * letra * 0.55
+    mas_largo = max(len(r) for r in texto.splitlines() or [""])
+    estimado = mas_largo * letra * 0.55
     if estimado > ancho * 0.9:
         letra *= ancho * 0.9 / estimado
     return int(letra)
 
 
-def dibujar(texto, ancho, alto, ritmo, segundos, destino):
-    """Escribe el .mov transparente con el texto. True si salio."""
-    fuente = buscar_fuente()
+def dibujar(texto, ancho, alto, ritmo, segundos, destino,
+            color=LETRA_COLOR, borde_color=BORDE_COLOR, fondo=None,
+            fundido=FUNDIDO, interlineado=None, arriba=ARRIBA,
+            fuentes=None):
+    """
+    Escribe el .mov transparente con el texto. True si salio.
+
+    'color' y 'borde_color' son los de la letra y su contorno. 'fondo'
+    pinta un bloque detras del texto, que mide lo que ocupa lo que hay y
+    crece con el; None lo deja sin bloque, que es como van los textos que
+    acompanan una explicacion. 'fundido' en 0 hace que entre y salga en
+    seco, que es lo que pide un gancho de arranque.
+
+    'interlineado' va en proporcion al tamano de la letra y solo cuenta
+    con mas de un renglon. Recoleta declara un alto de linea de 2,35
+    veces la letra -medido el 12/10/2026 sobre el gancho de dos
+    renglones-, que deja un hueco enorme en el medio; con -1.2 los
+    renglones quedan a un paso de 1,15. None lo deja como venga de la
+    fuente, que es como salian los textos de un solo renglon.
+
+    'fuentes' es la lista de nombres a buscar, la primera que este
+    instalada gana; None usa Recoleta Alt, que es la de siempre. Para
+    los titulos de UTN Stream va la constante TUSKER.
+
+    'arriba' es a que altura empieza el texto, en proporcion al alto.
+    El 0,08 de siempre lo pega al borde de arriba; se baja cuando hay
+    algo puesto ahi, como el logo de la esquina, para no taparlo.
+
+    Los colores se pasan como los entiende ffmpeg: un nombre ('white') o
+    '0xRRGGBB'.
+    """
+    fuente = buscar_fuente(fuentes)
     if fuente is None:
-        consola.error("no encuentro la fuente Recoleta Alt instalada.")
+        consola.error("no encuentro instalada ninguna de estas fuentes: {}."
+                      .format(", ".join(fuentes or FUENTES)))
         return False
     letra = _tamano_de_letra(texto, ancho, alto)
+    paso = ""
+    if interlineado is not None and len(texto.splitlines()) > 1:
+        paso = "line_spacing={}:".format(int(letra * interlineado))
+    caja = ""
+    if fondo:
+        # El bloque se dibuja con la misma drawtext, asi que sale del
+        # tamano del texto y no hay que medirlo aparte.
+        caja = "box=1:boxcolor={}:boxborderw={}:".format(
+            fondo, max(1, int(letra * 0.35)))
     filtro = (
-        "drawtext=fontfile=fuente{ext}:textfile=texto.txt:fontcolor=white:"
-        "fontsize={letra}:borderw={borde}:bordercolor=black:"
+        "drawtext=fontfile=fuente{ext}:textfile=texto.txt:fontcolor={color}:"
+        "fontsize={letra}:borderw={borde}:bordercolor={borde_color}:"
+        "{paso}{caja}"
         "shadowx={sombra}:shadowy={sombra}:shadowcolor=black@0.45:"
-        "x=(w-text_w)/2:y=h*{arriba},"
-        "fade=t=in:st=0:d={f}:alpha=1,"
-        "fade=t=out:st={salida:.3f}:d={f}:alpha=1").format(
-            ext=fuente.suffix, letra=letra,
-            borde=max(1, int(alto * BORDE)), sombra=max(1, int(alto * SOMBRA)),
-            arriba=ARRIBA, f=FUNDIDO, salida=max(0.0, segundos - FUNDIDO))
+        "x=(w-text_w)/2:y=h*{arriba}").format(
+            ext=fuente.suffix, letra=letra, color=color,
+            borde=max(1, int(alto * BORDE)), borde_color=borde_color,
+            paso=paso, caja=caja,
+            sombra=max(1, int(alto * SOMBRA)), arriba=arriba)
+    if fundido > 0:
+        filtro += (",fade=t=in:st=0:d={f}:alpha=1"
+                   ",fade=t=out:st={salida:.3f}:d={f}:alpha=1").format(
+                       f=fundido, salida=max(0.0, segundos - fundido))
 
     # Se trabaja en una carpeta aparte con la fuente y el texto copiados
     # alli: asi ni la ruta de la fuente (con espacios) ni el texto (con
@@ -123,12 +191,15 @@ def _contar(linea):
             for i in range(1, (linea.GetTrackCount(t) or 0) + 1)}
 
 
-def poner(proyecto, texto, segundo, segundos=DURACION):
+def poner(proyecto, texto, segundo, segundos=DURACION, **estilo):
     """
     Pone 'texto' en el segundo 'segundo' de la linea de tiempo abierta.
 
     No pisa nada: si en la pista de textos ya hay otro texto en ese
     momento, avisa y no lo pone.
+
+    Lo que venga en 'estilo' (color, borde_color, fondo, fundido) va tal
+    cual a 'dibujar'. Sin nada, sale el texto de siempre.
     """
     linea = proyecto.GetCurrentTimeline()
     ritmo = float(linea.GetSetting("timelineFrameRate"))
@@ -164,10 +235,12 @@ def poner(proyecto, texto, segundo, segundos=DURACION):
             return False
 
     SALIDA.mkdir(parents=True, exist_ok=True)
-    nombre = re.sub(r'[\\/:*?"<>|]', "", texto)[:40].strip() or "texto"
+    # Los saltos de linea tambien: un texto de dos renglones daba un
+    # nombre de archivo con un salto adentro y Windows no lo acepta.
+    nombre = re.sub(r'[\\/:*?"<>|\r\n\t]+', " ", texto)[:40].strip() or "texto"
     destino = SALIDA / "{} {}.mov".format(
         nombre, datetime.datetime.now().strftime("%Y%m%d %H%M%S"))
-    if not dibujar(texto, ancho, alto, ritmo, segundos, destino):
+    if not dibujar(texto, ancho, alto, ritmo, segundos, destino, **estilo):
         consola.error('no pude dibujar "{}".'.format(texto))
         return False
 
