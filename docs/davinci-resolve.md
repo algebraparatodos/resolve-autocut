@@ -605,6 +605,25 @@ porcentaje. Al final, `DeleteRenderJob` para no dejar la cola sucia.
 `GetRenderCodecs("mp4")` dice qué codificadores hay: en esta máquina
 también están los de NVIDIA, mucho más rápidos.
 
+## 24. El video de iPhone viene con ritmo variable, y descuadra todo
+
+El iPhone graba con ritmo variable (VFR): ffprobe da `r_frame_rate`
+60000/1001 pero `avg_frame_rate` distinto (2631000/43877), y Resolve
+cuenta otra cantidad de cuadros que ffmpeg (9008 contra 9002 en un clip
+de 2:30). Dos síntomas, ninguno con error:
+
+- `LinkProxyMedia` devuelve `False` con todas las copias, aunque
+  lleven el mismo ritmo, duración y cuadros que dice ffprobe.
+- La imagen (del video) y el sonido (del `.wav` nivelado) se van
+  corriendo a lo largo de cada clip: 15 cuadros al final de uno de 4
+  minutos. `desalineados()` lo delata.
+
+Se arregla pasando los originales a ritmo fijo **antes** de montar
+(`-fps_mode cfr -r 60000/1001 -c:v libx264 -crf 16 -c:a copy`) y
+montando sobre esas copias. Con eso las copias livianas entran y los 31
+tramos quedaron alineados al cuadro. Pasó el 18/10/2026 con un video
+para Casio.
+
 ---
 
 ## Y la forma de no perder nada: exportar antes de tocar
