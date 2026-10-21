@@ -624,6 +624,38 @@ montando sobre esas copias. Con eso las copias livianas entran y los 31
 tramos quedaron alineados al cuadro. Pasó el 18/10/2026 con un video
 para Casio.
 
+## 25. `VideoQuality` no se deja poner nunca
+
+`SetRenderSettings({"VideoQuality": ...})` devuelve `False` con todo:
+enteros (bitrate), `"Best"`, `0`, en H.264, H.264 NVIDIA y H.265 NVIDIA,
+y también desde la página Deliver. `MultiPassEncode` igual. Lo demás del
+mismo diccionario sí entra, pero si va junto a `VideoQuality` la llamada
+entera devuelve `False`: probar las claves de a una para saber cuál es.
+
+No hace falta pelearlo: con el códec recién elegido la calidad queda en
+`quality 4` / `vbr-quality`, que es "Best" (se lee en el preset guardado,
+`Support\Resolve Project Library\Resolve Projects\Settings\DeliverPresetList.xml`,
+campo `encoder_command_param_map`, un mapa en UTF-16 BE). Medido el
+19/10/2026: 1080x1920 a 59,94 sale a 42 Mbps. El preset del proyecto
+Casio se llama «Reel vertical - maxima calidad».
+
+## 26. Super Scale se activa por script y se mide renderizando
+
+`MediaPoolItem.SetClipProperty("Super Scale", 2, nitidez, ruido)` pone
+"2x Enhanced" (`GetClipProperty` contesta `2` igual que el 2x normal; la
+diferencia se ve sólo en el resultado). No mueve los encuadres hechos a
+mano: zoom y pan quedan idénticos. Para medirlo no sirve el visor ni
+`GrabStill`, que con proxies muestran la copia liviana: hay que
+renderizar un cuadro (`MarkIn = MarkOut`).
+
+Con zoom 2,07x sobre material 1080x1920, la nitidez (varianza del
+laplaciano) pasó de 13,7 a 31,4 con 2x y a 45,6 con 2x Enhanced. El
+precio es el render: Enhanced tarda unos 70 segundos por segundo de
+video en esta máquina, y además traba la reproducción. Juani lo descartó
+el 19/10/2026: el tope que puso es **cinco minutos de exportación**, así
+que Super Scale queda apagado. Sin él, el mismo video de 1:40 salió en
+41 segundos.
+
 ---
 
 ## Y la forma de no perder nada: exportar antes de tocar
